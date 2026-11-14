@@ -6,7 +6,7 @@ import 'screens/login_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // تهيئة Supabase باستخدام الرابط والمفتاح العام
+  // تهيئة Supabase (بدون authCallbackUrl)
   await Supabase.initialize(
     url: 'https://wdhrhwxsuuhgtiukvlan.supabase.co',
     anonKey: 'sb_publishable_HegN_CSUoB-s7oSr-vazBw_gjozjhdC',

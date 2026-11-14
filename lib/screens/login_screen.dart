@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/app_theme.dart';
 import '../config/api_endpoints.dart';
 import '../widgets/custom_textfield.dart';
 import 'register_screen.dart';
-import 'forgot_password_screen.dart'; // <-- هذا هو السطر المهم
+import 'forgot_password_screen.dart';
+import 'profile_screen.dart'; // استدعاء شاشة الملف الشخصي
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -25,6 +27,47 @@ class _LoginScreenState extends State<LoginScreen> {
   void initState() {
     super.initState();
     _loadSavedEmail();
+    _setupAuthListener();
+  }
+
+  void _setupAuthListener() {
+    Supabase.instance.client.auth.onAuthStateChange.listen((data) async {
+      final AuthChangeEvent event = data.event;
+      if (event == AuthChangeEvent.signedIn) {
+        final user = data.session?.user;
+        if (user != null) {
+          await _saveUserToDatabase(
+            email: user.email ?? '',
+            name: user.userMetadata?['full_name'] ?? 'مستخدم Google',
+            phone: user.phone ?? '',
+          );
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('تم تسجيل الدخول بنجاح عبر Google!')),
+            );
+          }
+        }
+      }
+    });
+  }
+
+  Future<void> _saveUserToDatabase({required String email, required String name, required String phone}) async {
+    try {
+      await http.post(
+        Uri.parse('${ApiEndpoints.baseUrl}/auth/register'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'full_name': name,
+          'email': email,
+          'phone': phone.isEmpty ? '000000000' : phone,
+          'password': 'google_oauth_user',
+          'role': 'client',
+        }),
+      );
+    } catch (e) {
+      print('Error saving user to database: $e');
+    }
   }
 
   Future<void> _loadSavedEmail() async {
@@ -82,10 +125,35 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  Future<void> _handleGoogleLogin() async {
+    try {
+      await Supabase.instance.client.auth.signInWithOAuth(
+        OAuthProvider.google,
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('خطأ في الاتصال بـ Google: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.background,
+      // زر مؤقت للانتقال إلى الملف الشخصي (للتجربة)
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: Colors.black,
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const ProfileScreen()),
+          );
+        },
+        child: const Icon(Icons.person, color: Colors.white),
+      ),
       body: Stack(
         children: [
           Container(
@@ -147,7 +215,6 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                             TextButton(
                               onPressed: () {
-                                // هذا هو الربط المهم
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(builder: (context) => const ForgotPasswordScreen()),
@@ -171,6 +238,23 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                                 child: const Text('تسجيل الدخول', style: TextStyle(fontSize: 16)),
                               ),
+                        
+                        const SizedBox(height: 15),
+                        const Text('أو', style: TextStyle(color: Colors.white70)),
+                        const SizedBox(height: 15),
+                        
+                        OutlinedButton.icon(
+                          onPressed: _handleGoogleLogin,
+                          icon: const Icon(Icons.g_mobiledata, size: 30, color: Colors.white),
+                          label: const Text('تسجيل الدخول عبر Google', style: TextStyle(color: Colors.white)),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(double.infinity, 45),
+                            side: const BorderSide(color: Colors.white70),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(15),
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
